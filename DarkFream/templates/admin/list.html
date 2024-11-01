@@ -1,0 +1,43 @@
+<!-- templates/admin/list.html -->
+{% extends "admin/base.html" %}
+
+{% block page_title %}{{ model.__name__ }} List{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ model.__name__ }} List</h1>
+    <a href="{{ base_url }}{{ model.__name__ }}/create" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>Create New
+    </a>
+</div>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>ID</th>
+            {% for field_name, field in model.get_fields() %}
+                <th>{{ field_name|title }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+            <tr>
+                <td><a href="{{ base_url }}{{ model.__name__ }}/edit/{{ item.id }}">{{ item.id }}</a></td>
+                {% for field_name, field in model.get_fields() %}
+                    <td>
+                        {% if field.__class__.__name__ == 'ForeignKeyField' %}
+                            {{ getattr(item, field_name).name | default(getattr(item, field_name).id) }}
+                        {% else %}
+                            {{ getattr(item, field_name) }}
+                        {% endif %}
+                    </td>
+                {% endfor %}
+                <td class="table-actions">
+
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

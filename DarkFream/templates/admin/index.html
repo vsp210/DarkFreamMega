@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    {% for model_name, model in models.items() %}
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{{ model_name }}</h5>
+                <p class="card-text">Manage {{ model_name }} records.</p>
+                <a href="{{ base_url }}{{ model_name }}" class="btn btn-primary">
+                    <i class="fas fa-list me-2"></i>View List
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
