@@ -1,11 +1,14 @@
-# DarkFream/DarkFream/auth.py
 import json
+from .config import DarkFreamConfig
 from .orm import User
+from .global_config import get_user_model
 
 class AdminAuth:
     def __init__(self, app):
         self.app = app
         self.base_url = '/admin/'
+        self.user_model = get_user_model() or User
+        print("AdminAuth user model:", self.user_model)
         self.register_routes()
 
     def register_routes(self):
@@ -24,10 +27,11 @@ class AdminAuth:
             username = data['data'].get('username', [''])[0]
             password = data['data'].get('password', [''])[0]
             try:
-                user = User.get(User.username == username)
+                user = self.user_model.get(self.user_model.username == username)
                 if user.verify_password(password):
                     data['session'] = data.get('session', {})
-                    data['session']['user_id'] = user.id
+                    user_info = f"{user.id}:{user.password}"
+                    data['session']['user'] = user_info
                     return 302, '', {
                         'Location': self.base_url,
                         'Content-Type': 'text/html',
@@ -35,8 +39,11 @@ class AdminAuth:
                     }
                 else:
                     error_message = 'Invalid username or password'
+                    print(error_message)
             except User.DoesNotExist:
                 error_message = 'Invalid username or password'
+                print(error_message)
+
 
             return 200, {
                 'template': 'admin/login.html',
@@ -62,7 +69,7 @@ class AdminAuth:
     def login_required(self, location='/admin/login'):
         def decorator(func):
             def wrapper(data, *args, **kwargs):
-                if 'user_id' not in data.get('session', {}):
+                if 'user' not in data.get('session', {}):
                     location_to_redirect = location or f'{self.base_url}login'
                     return (302, '', {
                         'Location': location_to_redirect,
@@ -72,19 +79,21 @@ class AdminAuth:
             return wrapper
         return decorator
 
-    def authotization(self, username, password):
-        user = User.get(username = username, password = User.hash_password(password))
+    def authotization(self, username, password=None, hash_password=None):
+        if hash_password is not None:
+            user = User.get(username = username, password = User.hash_password(password))
+        else: user = User.get(username = username, password = hash_password)
         if user:
             return user.id
         return None
 
 
     def get_current_user(self, session):
-        user_id = session.get('user_id')
+        user_id = session.get('user')
         if user_id:
             try:
-                return User.get_by_id(user_id)
-            except User.DoesNotExist:
+                return self.user_model.get_by_id(user_id.split(':')[0])
+            except self.user_model.DoesNotExist:
                 return None
         return None
 
@@ -96,13 +105,15 @@ class Auth:
 
     def __init__(self, app):
         self.app = app
+        self.user_model = get_user_model() or User
+        print("Auth user model:", self.user_model)
 
     @classmethod
     def login_required(cls, redirect_url=None):
         def decorator(func):
             @wraps(func)
             def wrapper(data, *args, **kwargs):
-                if 'user_id' not in data.get('session', {}):
+                if 'user' not in data.get('session', {}):
                     redirect_to = redirect_url or f'{cls.base_url}login'
                     return (302, '', {
                         'Location': redirect_to,
@@ -113,14 +124,16 @@ class Auth:
         return decorator
 
     def login(self, data):
+
         if data['method'] == 'POST':
             username = data['data'].get('username', [''])[0]
             password = data['data'].get('password', [''])[0]
             try:
-                user = User.get(User.username == username)
+                user = self.user_model.get(self.user_model.username == username)
                 if user.verify_password(password):
                     data['session'] = data.get('session', {})
-                    data['session']['user_id'] = user.id
+                    user_info = f"{user.id}:{user.password}"
+                    data['session']['user'] = user_info
                     return 302, '', {
                         'Location': self.base_url,
                         'Content-Type': 'text/html',
@@ -128,7 +141,7 @@ class Auth:
                     }
                 else:
                     error_message = 'Invalid username or password'
-            except User.DoesNotExist:
+            except self.user_model.DoesNotExist:
                 error_message = 'Invalid username or password'
 
             return error_message
@@ -136,6 +149,7 @@ class Auth:
         return True
 
     def logout(self, data, redirect_url=None):
+        print(data['session'])
         data['session'] = {}
         return 302, '', {
             'Location': f'{redirect_url if redirect_url is not None else self.base_url}login',
@@ -144,7 +158,7 @@ class Auth:
         }
 
     def get_current_user(self, session):
-        user_id = session.get('user_id')
+        user_id = session.get('user')
         if user_id:
-            return User.get_or_none(User.id == user_id)
+            return self.user_model.get_or_none(self.user_model.id == user_id.split(':')[0])
         return None

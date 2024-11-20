@@ -1,13 +1,15 @@
+from .config import DarkFreamConfig
 from peewee import *
 from functools import wraps
 from .orm import User
 from .auth import AdminAuth
+from .global_config import get_user_model
 
 
 def login_required(func):
     @wraps(func)
     def wrapper(data, *args, **kwargs):
-        if 'user_id' not in data.get('session', {}):
+        if 'user' not in data.get('session', {}):
             return (302, '', {
                 'Location': '/admin/login',
                 'Content-Type': 'text/html'
@@ -15,12 +17,15 @@ def login_required(func):
         return func(data, *args, **kwargs)
     return wrapper
 
+
 class DarkAdmin:
     def __init__(self, app):
         self.app = app
         self.models = {}
         self.base_url = '/admin/'
         self.auth = AdminAuth(app)
+        self.user_model = get_user_model() or User
+        print("Admin user model:", self.user_model)
         self.register_routes()
 
     def register_model(self, model):
@@ -109,8 +114,8 @@ class DarkAdmin:
                                 value = bool(int(data['data'].get(field_name, ['0'])[0]))
                                 setattr(new_item, field_name, value)
                             elif field_name in data['data']:
-                                if isinstance(new_item, User) and field_name == 'password':
-                                    hashed_password = User.hash_password(data['data'][field_name][0])
+                                if isinstance(new_item, self.user_model) and field_name == 'password':
+                                    hashed_password = self.user_model.hash_password(data['data'][field_name][0])
                                     setattr(new_item, field_name, hashed_password)
                                 else:
                                     setattr(new_item, field_name, data['data'][field_name][0])
@@ -166,15 +171,13 @@ class DarkAdmin:
                                 related_obj = field.rel_model.get_by_id(related_id)
                                 setattr(item, field_name, related_obj)
                             elif isinstance(field, BooleanField):
-                                value = bool(int(data['data'].get(field_name, ['0'])[0]))
-                                print(value)
-                                if value == False:
-                                    value = bool(int(data['data'].get(field_name, ['0'])[1]))
+                                values = data['data'].get(field_name, ['0'])
+                                value = bool(int(values[-1]))
                                 setattr(item, field_name, value)
                             else:
-                                if isinstance(item, User) and field_name == 'password':
+                                if isinstance(item, self.user_model) and field_name == 'password':
                                     if data['data'][field_name][0] != item.password:
-                                        hashed_password = User.hash_password(data['data'][field_name][0])
+                                        hashed_password = self.user_model.hash_password(data['data'][field_name][0])
                                         setattr(item, field_name, hashed_password)
                                 else:
                                     setattr(item, field_name, data['data'][field_name][0])
