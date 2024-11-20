@@ -119,6 +119,7 @@ if __name__ == "__main__":
 - **ВКонтакте**: https://vk.com/vsp210
 - **Телеграм**: https://t.me/vsp210
 - **Электронная почта**: vsp210@gmail.com
+- **Проект на pypi.org**: https://pypi.org/project/DarkFream/1.1.8/
 
 ### DarkFream - Мой собственный фреймворк с открытым исходным кодом
 
