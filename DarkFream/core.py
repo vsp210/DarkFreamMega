@@ -53,7 +53,6 @@ class StaticFiles:
                 with open(full_path, 'rb') as f:
                     content = f.read()
 
-                # Определяем content type
                 content_type = self.get_content_type(full_path)
 
                 return content, 200, content_type
@@ -141,9 +140,8 @@ def send_email(sender_email, password, recipient_email, subject, body, host, por
     msg['From'] = sender_email
     msg['To'] = recipient_email
 
-    # Use regular SMTP instead of SMTP_SSL
     server = smtplib.SMTP(host, port)
-    server.starttls()  # Enable TLS
+    server.starttls()
     server.login(sender_email, password)
     server.send_message(msg)
     server.quit()

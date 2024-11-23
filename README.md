@@ -1,15 +1,15 @@
 # DarkFream
 Мой собственный фреймворк DarkFream.
 
-## Привет я молодой 14 летний программист который патается создавать невозможное
+## Привет я молодой 14 летний программист который пытается создавать невозможное
 
 
-#### DarkFream - Мой собственный фреймворк основаный на идеи создать что то интересное
-DarkFream - это фреймворк который позволяет создавать крайне простые веб-приложения
+#### DarkFream - Мой собственный фреймворк основанный на идеи создать что-то интересное
+DarkFream - это фреймворк который позволяет создавать очень простые веб-приложения для разработчиков
 
 
 #### DarkFream - Основные функции:
-+ **Создание моделей** - Создание моделей для базы данных крайне схожая с фреймворком Django но имеет меньший функционал например:
++ **Создание моделей** - Создание моделей для базы данных очень схожая с фреймворком Django но имеет меньший функционал например:
 - **CharField**
 - **TextField**
 - **IntegerField**
@@ -22,12 +22,12 @@ DarkFream - это фреймворк который позволяет созд
 
 - для запуска требуется слонировать репозиторий командой:
 ```git clone https://github.com/vsp210/DarkFreamMega.git```
-- затем рекомендую создать venv
+- затем рекомендую создать виртуальное окружение venv (для изоляции зависимостей)
 ~~~bash
 py -* -m venv venv
 source venv/Scripts/activate
 ~~~
-где * - ваша версия пайтона
+где * — ваша версия Python
 - перейдите в папку:
 ~~~bash
 cd DarkFreamMega
@@ -38,82 +38,247 @@ pip install -r requirements.txt
 ~~~
 
 
-### Пример создания простого калькулятора:
+### Пример создания простой сот сети для постов:
 
 - DarkFreamMega/app.py:
 ~~~python
 from DarkFream.app import *
-from DarkFream.orm import *
 from DarkFream.auth import Auth
+from DarkFream.orm import *
+from models import Post
 
-app = DarkHandler.darkfream
+
+app = DarkHandler.initialize()
 auth = Auth(app)
+app.admin.register_model(Post)
 
+@app.route('/', methods=['GET'])
+def list_posts(data=None):
+    posts = Post.select()
+    return app.render('posts/list.html', {'posts': posts})
 
-@app.route('/')
-@auth.login_required('/login/')
-def index(data=None):
-    return 'Hello, World!'
+@app.route('/posts/create', methods=['GET', 'POST'])
+@auth.login_required('/login')
+def create_post(data=None):
+    if data['method'] == 'POST':
+        title = data['data'].get('title', [''])[0]
+        content = data['data'].get('content', [''])[0]
+        session = auth.get_current_user(data)
 
-@app.route('/login/', methods=['GET', 'POST'])
+        if session:
+            author = session.user
+            new_post = Post(title=title, content=content, author=author)
+            new_post.save()
+            return app.redirect('/')
+
+    return app.render('posts/create.html')
+
+@app.route('/posts/<id>', methods=['GET'])
+def view_post(data=None, id=None):
+    post = Post.get_by_id(id)
+    return app.render('posts/view.html', {'post': post})
+
+@app.route('/edit/<id>', methods=['GET', 'POST'])
+def edit_post(data=None, id=None):
+    post = Post.get_by_id(id)
+
+    if data['method'] == 'POST':
+        post.title = data['data'].get('title', [''])[0]
+        post.content = data['data'].get('content', [''])[0]
+        post.save()
+        return app.redirect('/posts')
+
+    return app.render('posts/edit.html', {'post': post})
+
+@app.route('/delete/<id>', methods=['POST'])
+def delete_post(data=None, id=None):
+    post = Post.get_by_id(id)
+    post.delete_instance()
+    return app.redirect('/posts')
+
+@app.route('/login', methods=['GET', 'POST'])
 def login(data=None):
     if data['method'] == 'POST':
-        return auth.login(data)
-    return app.render('login.html')
+        user = auth.login(data)
+        if user is not None:
+            return user
+    return app.render('posts/login.html')
 
-@app.route('/logout/', methods=['GET', 'POST'])
-@auth.login_required('/login/')
-def logout(data=None):
-    return auth.logout(data)
-
-@app.route('/test/<id>', methods=['GET', 'POST'])
-def test(data=None, id=None):
-    return 'Test: ' + id
-
-if __name__ == "__main__":
-    migrate([User])
-    run()
+if __name__ == '__main__':
+    migrate([Post])
+    app.run()
 ~~~
 
 - DarkFreamMega/templates/login.html:
 ~~~html
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card mt-5">
+            <div class="card-header">
+                <h3 class="text-center">Login</h3>
+            </div>
+            <div class="card-body">
+                {% if error_message %}
+                    <div class="alert alert-danger" role="alert">
+                        {{ error_message }}
+                    </div>
+                {% endif %}
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Login</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+~~~
+
+- DarkFreamMega/templates/edit.html:
+~~~html
+{% extends "base.html" %}
+{% block title %}Edit Post{% endblock %}
+
+{% block content %}
+<h1>Edit Post</h1>
+<form method="POST">
+    <div>
+        <label for="title">Title</label>
+        <input type="text" name="title" value="{{ post.title }}" required>
+    </div>
+    <div>
+        <label for="content">Content</label>
+        <textarea name="content" required>{{ post.content }}</textarea>
+    </div>
+    <button type="submit">Save</button>
+</form>
+<a href="/">Back to list</a>
+{% endblock %}
+~~~
+
+- DarkFreamMega/templates/list.html:
+~~~html
+{% extends "base.html" %}
+{% block title %}Posts{% endblock %}
+
+{% block content %}
+<h1>Posts</h1>
+<a href="/create" class="btn btn-primary">Create New Post</a>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for post in posts %}
+        <tr>
+            <td><a href="/posts/{{ post.id }}" class="post-link">{{ post.title }}</a></td>
+            <td>
+                <a href="/edit/{{ post.id }}" class="btn btn-warning">Edit</a>
+                <form action="/delete/{{ post.id }}" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
+~~~
+
+- DarkFreamMega/templates/view.html:
+~~~html
+{% extends "base.html" %}
+{% block title %}{{ post.title }}{% endblock %}
+
+{% block content %}
+<h1>{{ post.title }}</h1>
+<p>{{ post.content }}</p>
+<a href="/">Back to list</a>
+<a href="/edit/{{ post.id }}">Edit</a>
+<form action="/delete/{{ post.id }}" method="POST" style="display:inline;">
+    <button type="submit">Delete</button>
+</form>
+{% endblock %}
+~~~
+
+- DarkFreamMega/templates/base.html:
+~~~html
 <!DOCTYPE html>
-<html>
-    <head>
-        <title>Login</title>
-        <meta charset="UTF-8"> <!-- Рекомендую использовать эту строчку для избежания ошибки кодировки -->
-    </head>
-    <body>
-        <form method="POST">
-            <div class="mb-3">
-                <label for="username" class="form-label">Username</label>
-                <input type="text" class="form-control" id="username" name="username" required>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Posts{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .navbar {
+            margin-bottom: 20px;
+        }
+        .content {
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Post Management</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="">Posts</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/create">Create Post</a>
+                    </li>
+                </ul>
             </div>
-            <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
-                <input type="password" class="form-control" id="password" name="password" required>
-            </div>
-            <div class="d-grid">
-                <button type="submit" class="btn btn-primary">Login</button>
-            </div>
-        </form>
-    </body>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
 </html>
 ~~~
 
 ### Пояснение:
-В этом примере мы создали пример калькулятора
+В этом примере мы создали пример простого приложения постов
 - ##### В файле `app.py` мы создали приложение DarkFream, добавили маршруты:
-- `/` первая страница на которую можно зайти еслси пользователь вошол в систему
-- `/login/` для входа в систему
-- `/logout/` для выхода из системы
-- `/test/<id>` для вывода id
-- ##### В файле `templates/login.html` мы создали форму для входа в систему
-
+- `/` первая страница со всеми постами
+- `/create` страница создания поста (можно зайти еслси пользователь вошол в систему)
+- `/posts/<id>` страница просмотра определёного поста
+- `/edit/<id>` страница редактирования постов
+- `delete/<id>` страница удаления поста
+- `/login/` страница для входа в систему
 
 ### Примечание:
-В этом примере мы использовали функцию `migrate([User])` которая встроеная в DarkFream и нужна для создания бд с моделью User (Рекомендую всегда вставлять эту строчку).
-Также в DarkFream присутствует встроеная админка доступная по адресу `/admin/` (если вы выполнили команду `migrate([User])` то в бд будет пользователь админ с логином admin и паролем admin)
+В этом примере мы использовали функцию `migrate([Post])` которая встроеная в DarkFream и нужна для создания бд с моделью User (Рекомендую всегда вставлять эту строчку).
+Также в DarkFream присутствует встроеная админка доступная по адресу `/admin/`
 
 ### Контакты
 - **ВКонтакте**: https://vk.com/vsp210
@@ -127,3 +292,9 @@ if __name__ == "__main__":
 ## После любых изменений несчитая шаблонов нужно перезапускать сервер
 
 ##### Версия 2 (beta)
+
+#### Список изменений:
+- ##### Улучшена скорость
+- ##### Добавлена возможность создания большой кастомизации
+- ##### системы шифрования данных через сессии
+- ##### Добавлена возможность создания кастомных шаблонов

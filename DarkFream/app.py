@@ -1,13 +1,15 @@
 import json
 import os
+from pprint import pprint
 import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import time
 from jinja2 import Environment, FileSystemLoader, ChoiceLoader
 import urllib.parse
 
 from .core import PluginConfig, PluginManager, Request
 from .admin import DarkAdmin
-from .orm import User, conn
+from .orm import User, Session, conn
 
 
 
@@ -43,8 +45,13 @@ class DarkFream:
         def wrapper(func):
             if path_regex not in self.routes:
                 self.routes[path_regex] = {}
-            for method in methods:
-                self.routes[path_regex][method] = func
+
+            if '*' in methods:
+                self.routes[path_regex]['*'] = func
+            else:
+                for method in methods:
+                    self.routes[path_regex][method] = func
+
             return func
         return wrapper
 
@@ -65,9 +72,9 @@ class DarkFream:
 
         for pattern, methods in self.routes.items():
             match = re.match(pattern, path)
-            if match and method in methods:
+            if match and (method in methods or '*' in methods):
                 kwargs = match.groupdict()
-                result = methods[method](data, **kwargs)
+                result = methods.get(method, methods.get('*'))(data, **kwargs)
 
                 if isinstance(result, tuple):
                     if len(result) == 3:
@@ -94,11 +101,7 @@ class DarkFream:
                     context = response_body
                     if 'session' not in context:
                         context['session'] = data.get('session', {})
-                    return status_code, self.render(response_body.get('template', 'admin/base.html'), context), content_type
-
-        if '404' in self.routes:
-            response_body = self.routes['404'](data)
-            return 404, response_body, 'text/html'
+                    return status_code, self.render_with_cache(response_body.get('template', 'admin/base.html'), context), content_type
 
         return 404, "404 Not Found", 'text/html'
 
@@ -109,9 +112,20 @@ class DarkFream:
     def render_code(self, status_code, message, template_name=None, context=None):
         if template_name is not None:
             context = {'status_code': status_code,
-                       'message': message}
-            return self.render(template_name, context)
+                    'message': message}
+            return self.render_with_cache(template_name, context)
         return (status_code, message)
+
+    def cache_template(self, template_name):
+        if not hasattr(self, '_template_cache'):
+            self._template_cache = {}
+        if template_name not in self._template_cache:
+            self._template_cache[template_name] = self.env.get_template(template_name)
+        return self._template_cache[template_name]
+
+    def render_with_cache(self, template_name, context={}):
+        template = self.cache_template(template_name)
+        return template.render(context)
 
     def redirect(self, path, method='GET'):
         return (302, '', {
@@ -146,7 +160,8 @@ class DarkFream:
     def run(self, server_address='', port=8000):
         self.load_plugins()
         try:
-            httpd = HTTPServer((server_address, port), DarkHandler)
+            handler = get_handler() or DarkHandler
+            httpd = HTTPServer((server_address, port), handler)
             print(f'Serving on port {port}...')
             httpd.serve_forever()
         except KeyboardInterrupt:
@@ -156,7 +171,6 @@ class DarkFream:
         request = Request(scope, receive)
         path = request.path
 
-        # Проверяем статические обработчики
         for prefix, handler in self.static_handlers.items():
             if path.startswith(prefix):
                 response = await handler(request)
@@ -179,9 +193,12 @@ class DarkHandler(BaseHTTPRequestHandler):
     darkfream = None
 
     @classmethod
-    def initialize(cls):
+    def initialize(cls, darkfream=None):
         if cls.darkfream is None:
-            cls.darkfream = DarkFream()
+            if darkfream is not None:
+                cls.darkfream = darkfream
+            else:
+                cls.darkfream = DarkFream()
         return cls.darkfream
 
     def do_POST(self):
@@ -296,10 +313,12 @@ class DarkHandler(BaseHTTPRequestHandler):
 
 
 
-from .global_config import get_user_model, set_user_model
+
+from .global_config import get_user_model, set_user_model, get_handler
 
 
 def migrate(models=[], custom_user_model=None, initial_admin_data=None):
+    models += [User, Session]
     if custom_user_model:
         if not issubclass(custom_user_model, User):
             raise ValueError("Custom user model must inherit from User class")
@@ -307,7 +326,8 @@ def migrate(models=[], custom_user_model=None, initial_admin_data=None):
         print("Setting user model to:", custom_user_model)
 
     user_model = get_user_model() or User
-    DarkHandler.darkfream.admin.register_model(user_model)
+    handler = get_handler() or DarkHandler
+    handler.darkfream.admin.register_model(user_model)
     print("Migrate user model:", user_model)
 
     default_admin = {

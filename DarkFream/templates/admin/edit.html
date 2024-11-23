@@ -1,4 +1,3 @@
-<!-- templates/admin/edit.html -->
 {% extends "admin/base.html" %}
 
 {% block page_title %}{% if item %}Edit{% else %}Create{% endif %} {{ model.__name__ }}{% endblock %}
@@ -52,7 +51,6 @@
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-save me-2"></i>Save
                 </button>
-                    <!-- Save button HTML here -->
                     <a href="{{ base_url }}{{ model.__name__ }}/delete/{{ item.id }}"
                         class="btn btn-primary btn-danger"
                         onclick="confirmDelete(event, '{{ model.__name__ }}')">

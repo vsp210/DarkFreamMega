@@ -6,18 +6,6 @@ from .auth import AdminAuth
 from .global_config import get_user_model
 
 
-def login_required(func):
-    @wraps(func)
-    def wrapper(data, *args, **kwargs):
-        if 'user' not in data.get('session', {}):
-            return (302, '', {
-                'Location': '/admin/login',
-                'Content-Type': 'text/html'
-            })
-        return func(data, *args, **kwargs)
-    return wrapper
-
-
 class DarkAdmin:
     def __init__(self, app):
         self.app = app
@@ -45,60 +33,76 @@ class DarkAdmin:
                 for method, handler in methods.items():
                     self.app.routes[path][method] = self.auth.login_required(handler)
 
-
-        base_url = self.base_url
-        models = self.models
-
         @self.app.route(f'{self.base_url}')
-        @login_required
+        @self.auth.login_required
         def admin_index(data):
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            if current_user.is_admin == False:
+            cookie = data['headers'].get('Cookie', '')
+            cookie_parts = cookie.split('=')
+            if len(cookie_parts) > 1:
+                current_user = self.auth.get_current_user(cookie_parts[1])
+            else:
+                current_user = None
+
+            if current_user.user.is_admin == False:
                 return self.app.redirect(f'{self.base_url}logout')
+
             return 200, {
                 'template': 'admin/index.html',
                 'models': self.models,
                 'base_url': self.base_url,
-                'session': data.get('session', {}),
-                'current_user': current_user
+                'current_user': current_user.user
             }, 'text/html'
 
         @self.app.route(f'{self.base_url}<model_name>')
-        @login_required
+        @self.auth.login_required
         def admin_model_list(data=None, model_name=None):
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            if current_user.is_admin == False:
+            cookie = data['headers'].get('Cookie', '')
+            cookie_parts = cookie.split('=')
+            if len(cookie_parts) > 1:
+                current_user = self.auth.get_current_user(cookie_parts[1])
+            else:
+                current_user = None
+
+            if current_user.user.is_admin == False:
                 return self.app.redirect(f'{self.base_url}logout')
             model = self.models.get(model_name)
             if not model:
-                return 404, self.app.render('admin/error.html', {'message': "Model not found",
-                                                                 'base_url': self.base_url,
-                                                                 'session': data.get('session', {})
+                return 404, self.app.render_with_cache('admin/error.html', {
+                    'error_code': 404,
+                    'current_user': self.auth.get_current_user(cookie_parts[1]).user, 'message': "Model not found",
+                                                                 'models': self.models,
+                                                                 'base_url': self.base_url
                                                                 }), 'text/html'
 
             items = model.select()
-            current_user = self.auth.get_current_user(data.get('session', {}))
-
-            return 200, {
-                'template': 'admin/list.html',
+            return 200, self.app.render_with_cache('admin/list.html', {
                 'model': model,
+                'models': self.models,
                 'items': items,
                 'base_url': self.base_url,
-                'current_user': current_user
-            }, 'text/html'
+                'current_user': current_user.user
+            }), 'text/html'
 
 
         @self.app.route(f'{self.base_url}<model_name>/create', methods=['GET', 'POST'])
-        @login_required
+        @self.auth.login_required
         def admin_model_create(data=None, model_name=None):
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            if current_user.is_admin == False:
+            cookie = data['headers'].get('Cookie', '')
+            cookie_parts = cookie.split('=')
+            if len(cookie_parts) > 1:
+                current_user = self.auth.get_current_user(cookie_parts[1])
+            else:
+                current_user = None
+
+            if current_user.user.is_admin == False:
                 return self.app.redirect(f'{self.base_url}logout')
             model = self.models.get(model_name)
             if not model:
-                return 404, self.app.render('admin/error.html', {'message': f"Model {model_name} not found",
-                                                                 'base_url': self.base_url,
-                                                                 'session': data.get('session', {})
+                return 404, self.app.render_with_cache('admin/error.html', {
+                    'error_code': 404,
+                    'current_user': self.auth.get_current_user(cookie_parts[1]).user, 'message': f"Model {model_name} not found",
+                                                                            'models': self.models,
+                                                                 'base_url': self.base_url
                                                                 }), 'text/html'
 
             if data['method'] == 'POST':
@@ -122,44 +126,59 @@ class DarkAdmin:
                     new_item.save()
                     return self.app.redirect(f'{self.base_url}{model_name}')
                 except Exception as e:
-                    return 400, f"Error creating object: {str(e)}", 'text/html'
+                    return 400, self.app.render_with_cache('admin/error.html', {
+                        'error_code': 400,
+                        'current_user': self.auth.get_current_user(cookie_parts[1]).user,
+                    'message': f"Error creating object: {str(e)}",
+                    'models': self.models,
+                    'base_url': self.base_url
+                }), 'text/html'
 
             related_objects = {}
             for field_name, field in model._meta.fields.items():
                 if isinstance(field, ForeignKeyField):
                     related_objects[field_name] = self.get_related_objects(field)
 
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            return 200, self.app.render('admin/edit.html', {
+            return 200, self.app.render_with_cache('admin/edit.html', {
                 'model': model,
                 'item': None,
+                'models': self.models,
                 'base_url': self.base_url,
                 'related_objects': related_objects,
-                'session': data.get('session', {}),
-                'current_user': current_user
+                'current_user': current_user.user
             }), 'text/html'
 
         @self.app.route(f'{self.base_url}<model_name>/edit/<item_id>', methods=['GET', 'POST'])
-        @login_required
+        @self.auth.login_required
         def admin_model_edit(data=None, model_name=None, item_id=None):
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            if current_user.is_admin == False:
+            cookie = data['headers'].get('Cookie', '')
+            cookie_parts = cookie.split('=')
+            if len(cookie_parts) > 1:
+                current_user = self.auth.get_current_user(cookie_parts[1])
+            else:
+                current_user = None
+
+            if current_user.user.is_admin == False:
                 return self.app.redirect(f'{self.base_url}logout')
             model = self.models.get(model_name)
             if not model:
-                return 404, self.app.render('admin/error.html', {
+                return 404, self.app.render_with_cache('admin/error.html', {
+                    'error_code': 404,
+                    'current_user': self.auth.get_current_user(cookie_parts[1]).user,
                     'message': f"Model {model_name} not found",
-                    'base_url': self.base_url,
-                    'session': data.get('session', {})
+                    'models': self.models,
+                    'base_url': self.base_url
                 }), 'text/html'
 
             try:
                 item_id = int(item_id)
                 item = model.get(id=item_id)
             except Exception as e:
-                return 404, self.app.render('admin/error.html', {'message': f"Item not found: {str(e)}",
+                return 404, self.app.render_with_cache('admin/error.html', {
+                    'error_code': 404,
+                    'current_user': self.auth.get_current_user(cookie_parts[1]).user, 'message': f"Item not found: {str(e)}",
                                                                  'base_url': self.base_url,
-                                                                 'session': data.get('session', {})
+                                                                 'models': self.models
                                                                 }), 'text/html'
 
             if data['method'] == 'POST':
@@ -185,10 +204,12 @@ class DarkAdmin:
                     item.save()
                     return self.app.redirect(f'{self.base_url}{model_name}')
                 except Exception as e:
-                    return 400, self.app.render('admin/error.html', {
+                    return 400, self.app.render_with_cache('admin/error.html', {
+                        'error_code': 400,
+                        'current_user': self.auth.get_current_user(cookie_parts[1]).user,
                     'message': f"Error updating object: {str(e)}",
-                    'base_url': self.base_url,
-                    'session': data.get('session', {})
+                    'models': self.models,
+                    'base_url': self.base_url
                 }), 'text/html'
 
             related_objects = {}
@@ -196,44 +217,54 @@ class DarkAdmin:
                 if isinstance(field, ForeignKeyField):
                     related_objects[field_name] = self.get_related_objects(field)
 
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            return 200, self.app.render('admin/edit.html', {
+            return 200, self.app.render_with_cache('admin/edit.html', {
                 'model': model,
                 'item': item,
+                'models': self.models,
                 'base_url': self.base_url,
                 'related_objects': related_objects,
-                'session': data.get('session', {}),
-                'current_user': current_user
+                'current_user': current_user.user
             }), 'text/html'
 
         @self.app.route(f'{self.base_url}<model_name>/delete/<item_id>', methods=['GET', 'POST'])
-        @login_required
+        @self.auth.login_required
         def admin_model_delete(data=None, model_name=None, item_id=None):
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            if current_user.is_admin == False:
+            cookie = data['headers'].get('Cookie', '')
+            cookie_parts = cookie.split('=')
+            if len(cookie_parts) > 1:
+                current_user = self.auth.get_current_user(cookie_parts[1])
+            else:
+                current_user = None
+
+            if current_user.user.is_admin == False:
                 return self.app.redirect(f'{self.base_url}logout')
             model = self.models.get(model_name)
             if not model:
-                return 404, self.app.render('admin/error.html', {
+                return 404, self.app.render_with_cache('admin/error.html', {
+                    'error_code': 404,
+                    'current_user': self.auth.get_current_user(cookie_parts[1]).user,
                     'message': f"Model {model_name} not found",
-                    'base_url': self.base_url,
-                    'session': data.get('session', {})
+                    'models': self.models,
+                    'base_url': self.base_url
                 }), 'text/html'
-
             try:
                 item_id = int(item_id)
                 item = model.get_by_id(item_id)
             except ValueError:
-                return 400, self.app.render('admin/error.html', {
+                return 400, self.app.render_with_cache('admin/error.html', {
+                    'error_code': 400,
+                    'current_user': self.auth.get_current_user(cookie_parts[1]).user,
                     'message': f"Invalid item ID: {item_id}",
                     'base_url': self.base_url,
-                    'session': data.get('session', {})
+                    'models': self.models
                 }), 'text/html'
             except model.DoesNotExist:
-                return 404, self.app.render('admin/error.html', {
+                return 404, self.app.render_with_cache('admin/error.html', {
+                    'error_code': 404,
+                    'current_user': self.auth.get_current_user(cookie_parts[1]).user,
                     'message': f"Item with id {item_id} not found",
                     'base_url': self.base_url,
-                    'session': data.get('session', {})
+                    'models': self.models
                 }), 'text/html'
 
             if data['method'] == 'POST':
@@ -241,16 +272,17 @@ class DarkAdmin:
                     item.delete_instance()
                     return self.app.redirect(f'{self.base_url}{model_name}')
                 except Exception as e:
-                    return 500, self.app.render('admin/error.html', {
+                    return 500, self.app.render_with_cache('admin/error.html', {
+                        'error_code': 500,
+                        'current_user': self.auth.get_current_user(cookie_parts[1]).user,
                         'message': f"Error deleting object: {str(e)}",
                         'base_url': self.base_url,
-                        'session': data.get('session', {})
+                        'models': self.models
                     }), 'text/html'
-            current_user = self.auth.get_current_user(data.get('session', {}))
-            return 200, self.app.render('admin/delete_confirm.html', {
+            return 200, self.app.render_with_cache('admin/delete_confirm.html', {
                 'model': model,
                 'item': item,
                 'base_url': self.base_url,
-                'session': data.get('session', {}),
-                'current_user': current_user
+                'models': self.models,
+                'current_user': current_user.user
                 }), 'text/html'

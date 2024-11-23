@@ -43,3 +43,9 @@ class User(DarkModel):
 
     def __str__(self):
         return self.username
+
+
+class Session(DarkModel):
+    session_id = CharField(unique=True)
+    user = ForeignKeyField(User, backref='sessions')
+    expires_at = DateTimeField()
