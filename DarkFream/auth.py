@@ -134,11 +134,29 @@ class Auth:
     base_url = '/'
 
     def __init__(self, app):
+        """Инициализирует класс Auth с приложением.
+
+        Args:
+            app: Приложение, к которому будет привязан этот класс аутентификации.
+        """
         self.app = app
         self.user_model = get_user_model() or User
         print("Auth user model:", self.user_model)
 
     def login(self, data, redirect_uri=None):
+        """Обрабатывает процесс аутентификации пользователя.
+
+        Проверяет, есть ли активная сессия, и если да, перенаправляет пользователя.
+        Если сессии нет и метод запроса POST, проверяет учетные данные пользователя.
+        Если учетные данные верны, создает новую сессию.
+
+        Args:
+            data (dict): Данные запроса, содержащие информацию о пользователе и заголовки.
+            redirect_uri (str, optional): URL, на который будет перенаправлен пользователь после успешного входа.
+
+        Returns:
+            tuple: Код состояния HTTP, ответ и тип содержимого.
+        """
         logging = self.get_current_user(data)
         redirect = redirect_uri or self.base_url
         if logging:
@@ -173,6 +191,16 @@ class Auth:
                 print('Invalid username or password')
 
     def logout(self, data):
+        """Обрабатывает выход пользователя из системы.
+
+        Удаляет сессию пользователя и перенаправляет его на страницу входа.
+
+        Args:
+            data (dict): Данные запроса, содержащие заголовки.
+
+        Returns:
+            tuple: Код состояния HTTP, пустой ответ и заголовки для перенаправления.
+        """
         cookie = data['headers'].get('Cookie', '')
         cookie_parts = cookie.split('=')
         if len(cookie_parts) > 1:
@@ -183,7 +211,7 @@ class Auth:
             try:
                 Session.delete().where(Session.user == session.user).execute()
             except self.user_model.DoesNotExist:
-                print(f"User {session.user.username} does not exist during logout.")
+                print(f"User  {session.user.username} does not exist during logout.")
         data['session'] = {}
         return 302, '', {
             'Location': f'{self.base_url}login',
@@ -191,9 +219,18 @@ class Auth:
             'Set-Cookie': 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT'
         }
 
-
     @classmethod
     def login_required(cls, redirect_url=None):
+        """Декоратор, который проверяет, авторизован ли пользователь.
+
+        Если пользователь не авторизован, перенаправляет его на страницу входа.
+
+        Args:
+            redirect_url (str, optional): URL для перенаправления, если пользователь не авторизован.
+
+        Returns:
+            function: Обернутая функция, которая выполняет проверку аутентификации.
+        """
         def decorator(func):
             @wraps(func)
             def wrapper(data, *args, **kwargs):
@@ -207,18 +244,41 @@ class Auth:
             return wrapper
         return decorator
 
-
     def authotization(self, username, password=None, hash_password=None):
+        """Проверяет учетные данные пользователя для аутентификации.
+
+        Если указан хэш пароля, проверяет его с помощью хэширования,
+        в противном случае проверяет обычный пароль.
+
+        Args:
+            username (str): Имя пользователя для аутентификации.
+            password (str, optional): Пароль пользователя. Используется, если hash_password не указан.
+            hash_password (str, optional): Хэш пароля для проверки.
+
+        Returns:
+            int or None: ID пользователя, если аутентификация успешна, иначе None.
+        """
         if hash_password is not None:
-            user = User.get(username = username, password = User.hash_password(password))
-        else: user = User.get(username = username, password = hash_password)
+            user = User.get(username=username, password=User .hash_password(password))
+        else:
+            user = User.get(username=username, password=hash_password)
         if user:
             return user.id
         return None
 
-
     @classmethod
     def get_current_user(cls, data):
+        """Получает текущего авторизованного пользователя на основе данных запроса.
+
+        Проверяет наличие активной сессии в cookie и возвращает объект сессии,
+        если сессия еще не истекла.
+
+        Args:
+            data (dict): Данные запроса, содержащие заголовки.
+
+        Returns:
+            Session or None: Объект сессии, если пользователь авторизован, иначе None.
+        """
         if data is None:
             return None
         cookie = data['headers'].get('Cookie', '')

@@ -14,7 +14,10 @@ from .orm import User, Session, conn
 
 
 class DarkFream:
+    """Основной класс приложения DarkFream, который обрабатывает маршрутизацию и запросы."""
+
     def __init__(self):
+        """Инициализирует DarkFream с необходимыми компонентами, такими как маршруты и шаблоны."""
         self.routes = {}
         self.static_handlers = {}
         framework_templates_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
@@ -29,9 +32,17 @@ class DarkFream:
         self.plugin_config = PluginConfig()
 
     def mount(self, prefix, handler, name=None):
+        """Подключает статический обработчик к указанному префиксу.
+
+        Args:
+            prefix (str): Префикс URL, к которому будет подключен обработчик.
+            handler (callable): Обработчик, который будет вызываться для данного префикса.
+            name (str, optional): Имя обработчика. По умолчанию None.
+        """
         self.static_handlers[prefix] = handler
 
     def load_plugins(self):
+        """Загружает все включенные плагины и инициализирует их."""
         for plugin_name in self.plugin_config.enabled_plugins:
             plugin_class = self.plugin_manager.get_plugin(plugin_name)
             if plugin_class:
@@ -39,6 +50,15 @@ class DarkFream:
                 plugin.initialize()
 
     def route(self, path, methods=['GET']):
+        """Декоратор для регистрации маршрута.
+
+        Args:
+            path (str): Путь для маршрута.
+            methods (list, optional): Список HTTP-методов, поддерживаемых маршрутом. По умолчанию ['GET'].
+
+        Returns:
+            callable: Обернутый обработчик маршрута.
+        """
         path_regex = re.sub(r'<([^>]+)>', r'(?P<\1>[^/]+)', path)
         path_regex = f'^{path_regex}$'
 
@@ -56,10 +76,28 @@ class DarkFream:
         return wrapper
 
     def route_404(self, func):
+        """Регистрирует обработчик для маршрута 404.
+
+        Args:
+            func (callable): Обработчик, который будет вызван при отсутствии маршрута.
+
+        Returns:
+            callable: Обернутый обработчик маршрута 404.
+        """
         self.routes['404'] = func
         return func
 
     def handle_request(self, path, method='GET', data=None):
+        """Обрабатывает входящий HTTP-запрос.
+
+        Args:
+            path (str): Путь запроса.
+            method (str, optional): HTTP-метод запроса. По умолчанию 'GET'.
+            data (dict, optional): Данные запроса. По умолчанию None.
+
+        Returns:
+            tuple: Кортеж, содержащий статус-код, тело ответа и тип контента.
+        """
         headers = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -106,17 +144,45 @@ class DarkFream:
         return 404, "404 Not Found", 'text/html'
 
     def render(self, template_name, context={}):
+        """Рендерит шаблон с заданным контекстом.
+
+        Args:
+            template_name (str): Имя шаблона для рендеринга.
+            context (dict, optional): Контекст для шаблона. По умолчанию пустой словарь.
+
+        Returns:
+            str: Содержимое отрендеренного шаблона.
+        """
         template = self.env.get_template(template_name)
         return template.render(context)
 
     def render_code(self, status_code, message, template_name=None, context=None):
+        """Рендерит ответ с заданным статусом и сообщением.
+
+        Args:
+            status_code (int): Код статуса HTTP.
+            message (str): Сообщение для отображения.
+            template_name (str, optional): Имя шаблона для рендеринга. По умолчанию None.
+            context (dict, optional): Контекст для шаблона. По умолчанию None.
+
+        Returns:
+            tuple: Кортеж, содержащий код статуса и сообщение, или отрендеренное содержимое.
+        """
         if template_name is not None:
             context = {'status_code': status_code,
-                    'message': message}
+                       'message': message}
             return self.render_with_cache(template_name, context)
         return (status_code, message)
 
     def cache_template(self, template_name):
+        """Кэширует шаблон для повторного использования.
+
+        Args:
+            template_name (str): Имя шаблона для кэширования.
+
+        Returns:
+            Template: Отрендеренный шаблон.
+        """
         if not hasattr(self, '_template_cache'):
             self._template_cache = {}
         if template_name not in self._template_cache:
@@ -124,17 +190,43 @@ class DarkFream:
         return self._template_cache[template_name]
 
     def render_with_cache(self, template_name, context={}):
+        """Рендерит шаблон с кэшированием.
+
+        Args:
+            template_name (str): Имя шаблона для рендеринга.
+            context (dict, optional): Контекст для шаблона. По умолчанию пустой словарь.
+
+        Returns:
+            str: Содержимое отрендеренного шаблона.
+        """
         template = self.cache_template(template_name)
         return template.render(context)
 
     def redirect(self, path, method='GET'):
+        """Перенаправляет на указанный путь.
+
+        Args:
+            path (str): Путь для перенаправления.
+            method (str, optional): HTTP-метод для перенаправления. По умолчанию 'GET'.
+
+        Returns:
+            tuple: Кортеж, содержащий код статуса, пустое тело и заголовки для перенаправления.
+        """
         return (302, '', {
             'Location': path,
             'Content-Type': 'text/html'
         })
 
-
     def api_route(self, path, methods=['GET']):
+        """Декоратор для регистрации API маршрута.
+
+        Args:
+            path (str): Путь для API маршрута.
+            methods (list, optional): Список HTTP-методов, поддерживаемых маршрутом. По умолчанию ['GET'].
+
+        Returns:
+            callable: Обернутый обработчик API маршрута.
+        """
         def wrapper(func):
             if path not in self.routes:
                 self.routes[path] = {}
@@ -144,6 +236,14 @@ class DarkFream:
         return wrapper
 
     def api_handler(self, func):
+        """Обработчик для API маршрута, обрабатывающий ошибки.
+
+        Args:
+            func (callable): Обработчик API.
+
+        Returns:
+            callable: Обернутый обработчик с обработкой ошибок.
+        """
         def wrapper(data, *args, **kwargs):
             try:
                 result = func(data, *args, **kwargs)
@@ -152,12 +252,34 @@ class DarkFream:
                 print(str(e))
                 return self.json_response(500, {"error": str(e)})
         return wrapper
-
     def json_response(self, status_code, data):
+        """Создает JSON-ответ с заданным статусом и данными.
+
+        Args:
+            status_code (int): Код статуса HTTP.
+            data (dict): Данные, которые будут включены в JSON-ответ.
+
+        Returns:
+            tuple: Кортеж, содержащий код статуса, JSON-строку и заголовки для ответа.
+        """
         import json
-        return (status_code, json.dumps(data), 'application/json')
+        response_body = json.dumps(data)
+        headers = {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type'
+        }
+        return status_code, response_body, headers
+
 
     def run(self, server_address='', port=8000):
+        """Запускает HTTP сервер.
+
+        Args:
+            server_address (str): Адрес сервера. По умолчанию пустая строка.
+            port (int): Порт, на котором будет запущен сервер. По умолчанию 8000.
+        """
         self.load_plugins()
         try:
             handler = get_handler() or DarkHandler
@@ -194,6 +316,14 @@ class DarkHandler(BaseHTTPRequestHandler):
 
     @classmethod
     def initialize(cls, darkfream=None):
+        """Инициализирует DarkHandler с экземпляром DarkFream.
+
+        Args:
+            darkfream (DarkFream, optional): Экземпляр DarkFream. Если не указан, создается новый экземпляр.
+
+        Returns:
+            DarkFream: Экземпляр DarkFream, используемый в обработчике.
+        """
         if cls.darkfream is None:
             if darkfream is not None:
                 cls.darkfream = darkfream
@@ -202,6 +332,10 @@ class DarkHandler(BaseHTTPRequestHandler):
         return cls.darkfream
 
     def do_POST(self):
+        """Обрабатывает HTTP POST запрос.
+
+        Читает данные из запроса, обрабатывает их и возвращает ответ клиенту.
+        """
         if self.darkfream is None:
             self.darkfream = self.__class__.initialize()
         try:
@@ -244,6 +378,10 @@ class DarkHandler(BaseHTTPRequestHandler):
             print(f'Error handling POST request: {str(e)}')
 
     def do_OPTIONS(self):
+        """Обрабатывает HTTP OPTIONS запрос.
+
+        Возвращает заголовки, позволяющие клиентам узнать, какие методы поддерживаются сервером.
+        """
         if self.darkfream is None:
             self.darkfream = self.__class__.initialize()
         try:
@@ -257,6 +395,11 @@ class DarkHandler(BaseHTTPRequestHandler):
             print(f'Error handling OPTIONS request: {str(e)}')
 
     def parse_session(self):
+        """Парсит данные сессии из заголовка Cookie.
+
+        Returns:
+            dict: Данные сессии, если они существуют, иначе пустой словарь.
+        """
         session_cookie = self.headers.get('Cookie')
         if session_cookie:
             try:
@@ -266,8 +409,11 @@ class DarkHandler(BaseHTTPRequestHandler):
                 pass
         return {}
 
-
     def do_GET(self):
+        """Обрабатывает HTTP GET запрос.
+
+        Возвращает ответ клиенту в зависимости от запрашиваемого ресурса.
+        """
         if self.darkfream is None:
             self.darkfream = self.__class__.initialize()
         try:
@@ -299,6 +445,11 @@ class DarkHandler(BaseHTTPRequestHandler):
                 for header, value in content_type.items():
                     self.send_header(header, value)
             else:
+            self.send_response(status_code)
+            if isinstance(content_type, dict):
+                for header, value in content_type.items():
+                    self.send_header(header, value)
+            else:
                 self.send_header('Content-type', content_type)
             self.end_headers()
             self.wfile.write(response.encode('utf-8'))
@@ -307,18 +458,34 @@ class DarkHandler(BaseHTTPRequestHandler):
             print('Client connection aborted')
 
     def log_message(self, format, *args):
+        """Логирует сообщения о запросах.
+
+        Args:
+            format (str): Формат сообщения.
+            *args: Дополнительные аргументы для форматирования сообщения.
+        """
         client_ip = self.headers.get('X-Forwarded-For', self.headers.get('X-Real-IP', self.client_address[0]))
-        print(f'{client_ip} - {self.client_address[0]} - - [{self.log_date_time_string()}] - %s' % (format%args))
-
-
+        print(f'{client_ip} - {self.client_address[0]} - - [{self.log_date_time_string()}] - %s' % (format % args))
 
 
 
 from .global_config import get_user_model, set_user_model, get_handler
 
-
 def migrate(models=[], custom_user_model=None, initial_admin_data=None):
-    models += [User, Session]
+    """Мигрирует модели базы данных и создает начального администратора.
+
+    Эта функция добавляет указанные модели в базу данных, настраивает пользовательскую модель пользователя,
+    и создает начального администратора, если он еще не существует.
+
+    Args:
+        models (list, optional): Список моделей для миграции. По умолчанию пустой список.
+        custom_user_model (type, optional): Пользовательская модель пользователя, которая должна наследоваться от User.
+        initial_admin_data (dict, optional): Данные для создания начального администратора. Должны включать 'username' и 'password'.
+
+    Raises:
+        ValueError: Если custom_user_model не наследуется от User.
+    """
+    models += [User , Session]
     if custom_user_model:
         if not issubclass(custom_user_model, User):
             raise ValueError("Custom user model must inherit from User class")
